@@ -6,43 +6,70 @@ from tkinter import ttk
 from functions import GOES_functions as gf#type: ignore
 from matplotlib.figure import Figure
 from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg, NavigationToolbar2Tk
-
+from datetime import datetime, timedelta
 
 
 base_dir = getattr(sys, '_MEIPASS', os.path.dirname(os.path.abspath(__file__)))
 sgp = os.path.join(base_dir, "saved_graphs")
 inputs={}
+
+def get_current_time():
+    """Returns the current time as a string."""
+    return datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+
+def get_time_minus_lookback(lookback_duration):
+    """Returns the time 'lookback_duration' ago from the current time."""
+    lookback_map = {
+        "1 Hour": timedelta(hours=1),
+        "6 Hours": timedelta(hours=6),
+        "1 Day": timedelta(days=1),
+        "1 Week": timedelta(weeks=1)
+        }
+    return (datetime.now() - lookback_map.get(lookback_duration, timedelta(hours=1))).strftime("%Y-%m-%d %H:%M:%S")
+
 def submit():
     param_text = "Current Parameters:\n"
+    # Handle Custom Data Input
+    if date_var.get() == "Custom Data":
+        inputs["Start"] = start_date_entry.get()
+        inputs["End"] = end_date_entry.get()
+    else:
+        # Handle Live Data
+        inputs["Start"] = get_time_minus_lookback(lookback_dropdown.get())
+        inputs["End"] = get_current_time()
+
+    # Clean up the date output to just show the date (YYYY-MM-DD)
+    start_date_clean = inputs.get('Start', '(').split()[0]  # Extract just the date (YYYY-MM-DD)
+    end_date_clean = inputs.get('End', '(').split()[0]      # Extract just the date (YYYY-MM-DD)
+    
+    if date_var.get() == "Custom Data":
+        param_text += f"Start Date: {inputs['Start']}\n"
+        param_text += f"End Date: {inputs['End']}\n"
+    else:
+        param_text += f"Start Date: {inputs['Start']}\n"
+        param_text += f"End Date: {inputs['End']}\n"
+    
+    # Now display the other parameters from the parameter_entries
     for key, entry in parameter_entries.items():
         value = entry.get()
-        # param_text += f"{key}: {value}\n"
         display_key = key.split('(')[0].strip()
         param_text += f"{display_key}: {value}\n"
+
     params_display_label.config(text=param_text)
 
     print("Submitted Parameters:")
+    print(f"Start Date: {inputs['Start']}")
+    print(f"End Date: {inputs['End']}")
     for key, entry in parameter_entries.items():
         print(f"{key}: {entry.get()}")
-
-    print("\nSubmitted Settings:")
-    # for key, var in settings_vars.items():
-    #     print(f"{key}: {var.get()}")
-    inputs["Start"] = parameter_entries["Start (YYYY-MM-DD HR:MIN:SEC)"].get()
-    inputs["End"] = parameter_entries["End (YYYY-MM-DD HR:MIN:SEC)"].get()
-    inputs["Integration Time"] =int( parameter_entries["Integration Time (s)"].get())
-    inputs["Difference Time"] = int(parameter_entries["Difference Time (s)"].get())
-    inputs["EM Increment"] = float(parameter_entries[f"EM Increment ⁴⁹ cm⁻³"].get())
-    temp_range_str=(parameter_entries["Temperature Range (MK)"].get())
-    temp_range = [float(i) for i in temp_range_str.split(",")]
-    inputs["Temperature Range"] = temp_range
+    inputs["Integration Time"] = int(parameter_entries["Integration Time (s)"].get())
+    inputs["Difference Time"] = parameter_entries["Difference Time (s)"].get()
+    inputs["EM Increment"] = float(parameter_entries["EM Increment ⁴⁹ cm⁻³"].get())
+    temp_range_str = parameter_entries["Temperature Range (MK)"].get()
+    inputs["Temperature Range"] = [float(i) for i in temp_range_str.split(",")]
     inputs["FAI Duration"] = int(parameter_entries["FAI Duration (mins)"].get())
-    
 root=tk.Tk()
 root.title("FAI Flagging")
-# root.state('-zoomed',True)
-# root.update_idletasks()
-# root.geometry(f"{root.winfo_screenwidth()}x{root.winfo_screenheight()}+0+0")
 root.minsize(1000,600)
 # params frame
 params_frame=tk.Frame(root,width=200,height=400)
@@ -59,14 +86,65 @@ params_display_label.pack(padx=5, pady=5)
 notebook=ttk.Notebook(params_frame)
 notebook.pack(expand=True,fill="both")
 
+def toggle_timeframe_fields(show_custom):
+    if show_custom:
+        start_date_label.pack(anchor="w", padx=10, pady=(10, 0))
+        start_date_entry.pack(anchor="w", padx=10, pady=(10, 0))
+        end_date_label.pack(anchor="w", padx=10, pady=(10, 0))
+        end_date_entry.pack(anchor="w", padx=10, pady=(10, 0))
+        lookback_label.pack_forget()
+        lookback_dropdown.pack_forget()
+    else:
+        start_date_label.pack_forget()
+        start_date_entry.pack_forget()
+        end_date_label.pack_forget()
+        end_date_entry.pack_forget()
+        lookback_label.pack(anchor="w", padx=10, pady=(10, 0))
+        lookback_dropdown.pack(anchor="w", padx=10, pady=(10, 0))
+
+date_tab=tk.Frame(notebook)
+date_var=tk.StringVar(value="None")
+date_entries = {}  # Dictionary to hold text inputs
+
+options=[
+    "Start (YYYY-MM-DD HR:MIN:SEC)",
+    "End (YYYY-MM-DD HR:MIN:SEC)",
+]
+
+custom_radio = tk.Radiobutton(date_tab, text="Custom Data", variable=date_var, value="Custom Data", command=lambda: toggle_timeframe_fields(True))
+custom_radio.pack(anchor="w", padx=10, pady=(10, 0))
+
+live_radio = tk.Radiobutton(date_tab, text="Live Data", variable=date_var, value="Live Data", command=lambda: toggle_timeframe_fields(False))
+live_radio.pack(anchor="w", padx=10, pady=(10, 0))
+
+start_date_label = tk.Label(date_tab, text="Start Date:")
+start_date_label.pack(anchor="w", padx=10, pady=(10, 0))
+start_date_entry = tk.Entry(date_tab)
+start_date_entry.pack(anchor="w", padx=10, pady=(10, 0))
+
+end_date_label = tk.Label(date_tab, text="End Date:")
+end_date_label.pack(anchor="w", padx=10, pady=(10, 0))
+end_date_entry = tk.Entry(date_tab)
+end_date_entry.pack(anchor="w", padx=10, pady=(10, 0))
+
+lookback_label = tk.Label(date_tab, text="Lookback Duration:")
+lookback_label.pack(anchor="w", padx=10, pady=(10, 0))
+
+lookback_options = ["1 Hour", "6 Hours", "1 Day", "1 Week"]
+lookback_dropdown = ttk.Combobox(date_tab, values=lookback_options)
+lookback_dropdown.pack(anchor="w", padx=10, pady=(10, 0))
+
+date_entries = {
+    "Start (YYYY-MM-DD HR:MIN:SEC)": start_date_entry,
+    "End (YYYY-MM-DD HR:MIN:SEC)": end_date_entry
+}
+
 # parameter tab
 params_tab=tk.Frame(notebook)
 params_var=tk.StringVar(value="None")
 parameter_entries = {}  # Dictionary to hold text inputs
 
 parameters = [
-    "Start (YYYY-MM-DD HR:MIN:SEC)",
-    "End (YYYY-MM-DD HR:MIN:SEC)",
     "Integration Time (s)",
     "Difference Time (s)",
     f"EM Increment ⁴⁹ cm⁻³",
@@ -83,24 +161,8 @@ for param in parameters:
     entry.pack(anchor="w",padx=10,pady=(10,0),fill="x")
     parameter_entries[param]=entry
 
-# settings_tab = tk.Frame(notebook)
-# settings_vars = {}
-
-# settings = ["Save Plot", "Show Plot"]
-# options = ["yes", "no"]
-
-# for setting in settings:
-#     tk.Label(settings_tab, text=setting).pack(anchor="w", padx=10, pady=(10, 0))
-#     var = tk.StringVar(value="yes")
-#     dropdown = tk.OptionMenu(settings_tab, var, *options)
-#     dropdown.pack(anchor="w", padx=10, pady=(0, 10))
-#     settings_vars[setting] = var
-
-# notebook.add(date_tab,text="Data Times")
+notebook.add(date_tab,text="Data Times")
 notebook.add(params_tab,text="Parameters")
-# notebook.add(settings_tab,text="Settings")
-
-tk.Button(params_tab,text="Submit",command=submit).pack(pady=10)
 
 def process_data():
     start_extension=inputs["Start"].replace(' ', '_').replace(':', '-')
@@ -144,23 +206,13 @@ def process_data():
     )
 
     update_plot_list()
-    # if os.path.exists(filepath):
-    #     for widget in plot_display_frame.winfo_children():
-    #         widget.destroy()
 
-    #     try:
-    #         img = tk.PhotoImage(file=filepath)
-    #     except tk.TclError:
-    #         from PIL import Image, ImageTk  # fallback for non-PNGs
-    #         img = Image.open(filepath)
-    #         img = ImageTk.PhotoImage(img)
-
-    #     label = tk.Label(plot_display_frame, image=img)
-    #     label.image = img  # Prevent garbage collection
-    #     label.pack(fill=tk.BOTH, expand=True)
-
-Button(params_tab,text="Run",command=process_data).pack()
-
+def submit_run():
+    submit()
+    process_data()
+Button(params_tab,text="submit",command=submit).pack()
+Button(params_tab,text="Run",command=submit_run).pack()
+# submit()
 
 image_frame=tk.Frame(root,width=800,height=400)
 image_frame.pack(padx=5,pady=5,side=tk.RIGHT)
