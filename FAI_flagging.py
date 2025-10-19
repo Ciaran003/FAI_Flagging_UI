@@ -210,7 +210,7 @@ def process_data():
 def submit_run():
     submit()
     process_data()
-Button(params_tab,text="submit",command=submit).pack()
+#Button(params_tab,text="submit",command=submit).pack()
 Button(params_tab,text="Run",command=submit_run).pack()
 # submit()
 
