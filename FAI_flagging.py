@@ -3,32 +3,44 @@ import sys
 from tkinter import *
 import tkinter as tk
 from tkinter import ttk
+from PIL import Image, ImageTk
 from functions import GOES_functions as gf#type: ignore
 from matplotlib.figure import Figure
 from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg, NavigationToolbar2Tk
-from datetime import datetime, timedelta
-
+from datetime import datetime, timedelta,timezone
+from zoneinfo import ZoneInfo
+from tzlocal import get_localzone_name#type:ignore
+import io
+import tkinter.scrolledtext as scrolledtext
 
 base_dir = getattr(sys, '_MEIPASS', os.path.dirname(os.path.abspath(__file__)))
 sgp = os.path.join(base_dir, "saved_graphs")
 inputs={}
 
 def get_current_time():
-    """Returns the current time as a string."""
-    return datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    """Returns the current UTC time as a datetime object."""
+    local_tz_name = get_localzone_name()
+    local_zone = ZoneInfo(local_tz_name)
+    local_time = datetime.now(local_zone)
+    utc_time = local_time.astimezone(timezone.utc)
+    return utc_time# - timedelta(hours=1)
 
 def get_time_minus_lookback(lookback_duration):
-    """Returns the time 'lookback_duration' ago from the current time."""
+    """Returns the time 'lookback_duration' ago from the current UTC time."""
     lookback_map = {
         "1 Hour": timedelta(hours=1),
         "6 Hours": timedelta(hours=6),
         "1 Day": timedelta(days=1),
         "1 Week": timedelta(weeks=1)
-        }
-    return (datetime.now() - lookback_map.get(lookback_duration, timedelta(hours=1))).strftime("%Y-%m-%d %H:%M:%S")
+    }
+    utc_now = get_current_time()
+    lookback_delta = lookback_map.get(lookback_duration, timedelta(hours=1))
+    result_time = utc_now - lookback_delta
+    return result_time.strftime("%Y-%m-%d %H:%M:%S")  # format only when returning
+
 
 def submit():
-    param_text = "Current Parameters:\n"
+    param_text = "Parameters:\n"
     # Handle Custom Data Input
     if date_var.get() == "Custom Data":
         inputs["Start"] = start_date_entry.get()
@@ -36,11 +48,7 @@ def submit():
     else:
         # Handle Live Data
         inputs["Start"] = get_time_minus_lookback(lookback_dropdown.get())
-        inputs["End"] = get_current_time()
-
-    # Clean up the date output to just show the date (YYYY-MM-DD)
-    start_date_clean = inputs.get('Start', '(').split()[0]  # Extract just the date (YYYY-MM-DD)
-    end_date_clean = inputs.get('End', '(').split()[0]      # Extract just the date (YYYY-MM-DD)
+        inputs["End"] = get_current_time().strftime('%Y-%m-%d %H:%M:%S')
     
     if date_var.get() == "Custom Data":
         param_text += f"Start Date: {inputs['Start']}\n"
@@ -71,15 +79,29 @@ def submit():
 root=tk.Tk()
 root.title("FAI Flagging")
 root.minsize(1000,600)
+
 # params frame
 params_frame=tk.Frame(root,width=200,height=400)
-params_frame.pack(padx=5,pady=5,side=tk.LEFT,fill=tk.Y)
+params_frame.pack(padx=10,pady=10,side=tk.LEFT,fill=tk.Y)
 tk.Label(
     params_frame,
     text="Parameters"
 ).pack(padx=5,pady=5)
 tk.Label(params_frame).pack(padx=5, pady=5)
-params_display_label = tk.Label(params_frame, text="Parameters:\n(none)", justify="left")
+# params_display_label = tk.Label(params_frame, text="Parameters:\n(none)", justify="left")
+initial_params_text = "Parameters:\n"
+for param in [
+    "Start Date: ",
+    "End Date: ",
+    "Integration Time (s): ",
+    "Difference Time (s): ",
+    "EM Increment ⁴⁹ cm⁻³: ",
+    "Temperature Range (MK): ",
+    "FAI Duration (mins): "
+]:
+    initial_params_text += f"{param}\n"
+
+params_display_label = tk.Label(params_frame, text=initial_params_text, justify="left")
 params_display_label.pack(padx=5, pady=5)
 
 # Input parameters and settings
@@ -147,7 +169,7 @@ parameter_entries = {}  # Dictionary to hold text inputs
 parameters = [
     "Integration Time (s)",
     "Difference Time (s)",
-    f"EM Increment ⁴⁹ cm⁻³",
+    "EM Increment ⁴⁹ cm⁻³",
     "Temperature Range (MK)",
     "FAI Duration (mins)"
 ]
@@ -179,74 +201,171 @@ def process_data():
     t_em_diff=gf.calc_temp_em(ts_diff)  # used in flagging calculations
     t_em_og=gf.calc_temp_em(ts_1s)      # used in temperature and emission plot
     flagged_df,flagged_times=gf.FAI_flagging(
+        ts_og,
         t_em_diff,
         inputs["EM Increment"],
         inputs["Temperature Range"],
         inputs["Difference Time"],
-        inputs["FAI Duration"]
-        )
+        inputs["FAI Duration"])
+
     anticipation_plot=gf.anticipation_plot(
         smooth_plot,
         flagged_times,
         sgp,
         inputs["Start"],
-        extension
-        )
+        extension,
+        integ_time_extenstion,
+        diff_time_extension,
+        em_extension,
+        inputs["Temperature Range"],
+        event_gap_extension
+)
+    
     temperature_emission_plot=gf.em_temp_plot(
         t_em_og,
         sgp,
         inputs["Start"],
-        start_extension
-    )
-    gf.em_temp_plot(
-        t_em_og,
-        sgp,
-        inputs["Start"],
-        start_extension
-    )
+        start_extension)
 
     update_plot_list()
 
 def submit_run():
     submit()
     process_data()
-#Button(params_tab,text="submit",command=submit).pack()
+# Button(params_tab,text="submit",command=submit).pack()
 Button(params_tab,text="Run",command=submit_run).pack()
 # submit()
 
-image_frame=tk.Frame(root,width=800,height=400)
-image_frame.pack(padx=5,pady=5,side=tk.RIGHT)
+### Frames 
+image_frame = tk.Frame(root, width=800, height=400)
+image_frame.pack(padx=5, pady=5, side=tk.RIGHT, fill=tk.BOTH, expand=True)
 
-plot_list_frame = tk.Frame(image_frame, width=150)
-plot_list_frame.pack(side=tk.RIGHT, fill=tk.Y)
+plot_list_frame = tk.Frame(image_frame)
+plot_list_frame.pack(side=tk.LEFT, anchor="n", padx=5, pady=5, fill=tk.Y)
 
-plot_display_frame = tk.Frame(image_frame)
-plot_display_frame.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
-plot_listbox = tk.Listbox(plot_list_frame)
-plot_listbox.pack(fill=tk.BOTH, expand=True)
+# plot_display_frame = tk.Frame(image_frame)
+# plot_display_frame.pack(side=tk.RIGHT, fill=tk.BOTH, expand=False)
+
+# Container on the right side for both plot + console
+right_display_container = tk.Frame(image_frame)
+right_display_container.pack(side=tk.RIGHT, fill=tk.BOTH, expand=True)
+
+# Top: plot display area
+plot_display_frame = tk.Frame(right_display_container, height=400)
+plot_display_frame.pack(side=tk.TOP, fill=tk.BOTH, expand=True)
+
+# Bottom: console area
+console_frame = tk.Frame(right_display_container, height=150)
+console_frame.pack(side=tk.BOTTOM, fill=tk.X)
+
+console_text = scrolledtext.ScrolledText(
+    console_frame, wrap="word", height=8,
+    bg="white", fg="black", insertbackground="white"#, font=("Consolas", 10)
+)
+console_text.pack(expand=True, fill="both", padx=5, pady=5)
+
+
+# --- Canvas + Scrollbar for thumbnails ---
+canvas = tk.Canvas(plot_list_frame,width=120)
+scrollbar = ttk.Scrollbar(plot_list_frame, orient="vertical", command=canvas.yview)
+thumb_container = tk.Frame(canvas)
+
+thumb_container.bind(
+    "<Configure>",
+    lambda e: canvas.configure(scrollregion=canvas.bbox("all"))
+)
+
+canvas.create_window((0, 0), window=thumb_container, anchor="n")
+canvas.configure(yscrollcommand=scrollbar.set)
+
+canvas.pack(side=tk.RIGHT, fill=tk.BOTH, expand=True)
+scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
+
+# --- Display selected image ---
+def show_selected_plot(filepath):
+    for widget in plot_display_frame.winfo_children():
+        widget.destroy()
+        # def resize_image(event):
+        #     show_selected_plot(filepath)  # reload and rescale image
+        # plot_display_frame.bind("<Configure>", lambda e: resize_image(e))
+
+
+    img = Image.open(filepath)
+    img_tk = ImageTk.PhotoImage(img)
+    label = tk.Label(plot_display_frame, image=img_tk)
+    label.image = img_tk  # keep reference
+    # label.pack(fill=tk.BOTH, expand=True)
+    label.pack(expand=True, anchor="center")
 
 def update_plot_list():
-    plot_listbox.delete(0, tk.END)
-    for fname in os.listdir(sgp):
-        if fname.endswith(".png"):
-            plot_listbox.insert(tk.END, fname)
+    # Clear previous thumbnails
+    for widget in thumb_container.winfo_children():
+        widget.destroy()
+
+    # Get and sort images by modification time (newest first)
+    png_files = [
+        os.path.join(sgp, f)
+        for f in os.listdir(sgp)
+        if f.lower().endswith(".png")
+    ]
+    png_files.sort(key=os.path.getmtime, reverse=True)
+
+    thumb_size = (100, 100)
+    thumb_refs = []
+
+    for filepath in png_files:
+        img = Image.open(filepath)
+        img.thumbnail(thumb_size)
+        img_tk = ImageTk.PhotoImage(img)
+        thumb_refs.append(img_tk)
+
+        # Directly pack the thumbnail (no frame, no filename)
+        label = tk.Label(
+            thumb_container,
+            image=img_tk,
+            cursor="hand2",
+            bd=2,
+            relief=tk.RIDGE
+        )
+        label.image = img_tk
+
+        # Pack it to fill horizontally (this removes the gap)
+        label.pack(padx=5, pady=5)
+
+        # Bind click event
+        label.bind("<Button-1>", lambda e, fp=filepath: show_selected_plot(fp))
+
+    # Keep references so they aren't garbage-collected
+    thumb_container.thumbs = thumb_refs
 
 update_plot_list()
 
-def show_selected_plot(event):
-    selection = plot_listbox.curselection()
-    if selection:
-        fname = plot_listbox.get(selection[0])
-        filepath = os.path.join(sgp, fname)
 
-        for widget in plot_display_frame.winfo_children():
-            widget.destroy()
 
-        img = tk.PhotoImage(file=filepath)  # or use PIL if needed for more formats
-        label = tk.Label(plot_display_frame, image=img)
-        label.image = img  # Keep a reference!
-        label.pack(fill=tk.BOTH, expand=True)
+# Redirect stdout and stderr to the console text widget
+class ConsoleRedirector(io.StringIO):
+    def __init__(self, text_widget):
+        super().__init__()
+        self.text_widget = text_widget
 
-plot_listbox.bind("<<ListboxSelect>>", show_selected_plot)
+    def write(self, message):
+        # Insert text in the widget, scroll to the end
+        self.text_widget.insert(tk.END, message)
+        self.text_widget.see(tk.END)
+        # Update immediately for live feedback
+        self.text_widget.update_idletasks()
+
+    def flush(self):
+        pass  # required for file-like behavior but not used here
+
+# Redirect print() and errors
+sys.stdout = ConsoleRedirector(console_text)
+sys.stderr = ConsoleRedirector(console_text)
+
+
+
+
+
 
 root.mainloop()
+
