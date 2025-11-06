@@ -1,0 +1,38 @@
+from datetime import datetime, timedelta,timezone
+from zoneinfo import ZoneInfo
+from tzlocal import get_localzone_name#type:ignore
+# import sys
+# import os
+import pandas as pd
+# base_dir = getattr(sys, '_MEIPASS', os.path.dirname(os.path.abspath(__file__)))
+
+# handles recent data, current time
+def get_current_time():
+    """Returns the current UTC time as a datetime object."""
+    local_tz_name = get_localzone_name()
+    local_zone = ZoneInfo(local_tz_name)
+    local_time = datetime.now(local_zone)
+    utc_time = local_time.astimezone(timezone.utc)
+    return utc_time# - timedelta(hours=1)
+
+# handles recent data, lookback time
+def get_time_minus_lookback(lookback_duration):
+    """Returns the time 'lookback_duration' ago from the current UTC time."""
+    lookback_map = {
+        "1 Hour": timedelta(hours=1),
+        "6 Hours": timedelta(hours=6),
+        "1 Day": timedelta(days=1),
+        "1 Week": timedelta(weeks=1)
+    }
+    utc_now = get_current_time()
+    lookback_delta = lookback_map.get(lookback_duration, timedelta(hours=1))
+    result_time = utc_now - lookback_delta
+    return result_time.strftime("%Y-%m-%d %H:%M:%S")  # format only when returning
+
+# handles bulk times (multiple flares, run only once)
+def batch_times(csv):
+    df=pd.read_csv(csv)
+    starts=df["Start Date"]
+    ends=df["End Date"]
+    flare_class=df["Class"]
+    return starts,ends,flare_class
