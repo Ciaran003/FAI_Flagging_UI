@@ -5,11 +5,9 @@ import tkinter as tk
 from tkinter import ttk
 from PIL import Image, ImageTk
 from functions import GOES_functions as gf#type: ignore
+from functions import time_inputs as time #type: ignore
 from matplotlib.figure import Figure
 from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg, NavigationToolbar2Tk
-from datetime import datetime, timedelta,timezone
-from zoneinfo import ZoneInfo
-from tzlocal import get_localzone_name#type:ignore
 import io
 import tkinter.scrolledtext as scrolledtext
 
@@ -17,45 +15,32 @@ base_dir = getattr(sys, '_MEIPASS', os.path.dirname(os.path.abspath(__file__)))
 sgp = os.path.join(base_dir, "saved_graphs")
 inputs={}
 
-def get_current_time():
-    """Returns the current UTC time as a datetime object."""
-    local_tz_name = get_localzone_name()
-    local_zone = ZoneInfo(local_tz_name)
-    local_time = datetime.now(local_zone)
-    utc_time = local_time.astimezone(timezone.utc)
-    return utc_time# - timedelta(hours=1)
-
-def get_time_minus_lookback(lookback_duration):
-    """Returns the time 'lookback_duration' ago from the current UTC time."""
-    lookback_map = {
-        "1 Hour": timedelta(hours=1),
-        "6 Hours": timedelta(hours=6),
-        "1 Day": timedelta(days=1),
-        "1 Week": timedelta(weeks=1)
-    }
-    utc_now = get_current_time()
-    lookback_delta = lookback_map.get(lookback_duration, timedelta(hours=1))
-    result_time = utc_now - lookback_delta
-    return result_time.strftime("%Y-%m-%d %H:%M:%S")  # format only when returning
-
-
 def submit():
     param_text = "Parameters:\n"
     # Handle Custom Data Input
-    if date_var.get() == "Custom Data":
+    if date_var.get() == "Specific Data":
         inputs["Start"] = start_date_entry.get()
         inputs["End"] = end_date_entry.get()
-    else:
-        # Handle Live Data
-        inputs["Start"] = get_time_minus_lookback(lookback_dropdown.get())
-        inputs["End"] = get_current_time().strftime('%Y-%m-%d %H:%M:%S')
+    # Handle Live Data
+    elif date_var.get() == "Live Data":
+        inputs["Start"] = time.get_time_minus_lookback(lookback_dropdown.get())
+        inputs["End"] = time.get_current_time().strftime('%Y-%m-%d %H:%M:%S')
+    # Handle Live Data
+    elif date_var.get() == "Bulk Data":
+        csv=os.path.join(base_dir,csv_entry.get())
+        starts,ends,flare_class= time.batch_times(csv)
+        inputs["Start"] =starts
+        inputs["End"] =ends
     
-    if date_var.get() == "Custom Data":
+    if date_var.get() == "Specific Data":
         param_text += f"Start Date: {inputs['Start']}\n"
         param_text += f"End Date: {inputs['End']}\n"
-    else:
+    elif date_var.get() == "Live Data":
         param_text += f"Start Date: {inputs['Start']}\n"
         param_text += f"End Date: {inputs['End']}\n"
+    elif date_var.get() == "Bulk Data":
+        param_text += f"Start Date: Bulk\n"
+        param_text += f"End Date: Bulk\n"
     
     # Now display the other parameters from the parameter_entries
     for key, entry in parameter_entries.items():
@@ -109,20 +94,33 @@ notebook=ttk.Notebook(params_frame)
 notebook.pack(expand=True,fill="both")
 
 def toggle_timeframe_fields(show_custom):
-    if show_custom:
+    if show_custom==1:
         start_date_label.pack(anchor="w", padx=10, pady=(10, 0))
         start_date_entry.pack(anchor="w", padx=10, pady=(10, 0))
         end_date_label.pack(anchor="w", padx=10, pady=(10, 0))
         end_date_entry.pack(anchor="w", padx=10, pady=(10, 0))
         lookback_label.pack_forget()
         lookback_dropdown.pack_forget()
-    else:
+        csv_label.pack_forget()
+        csv_entry.pack_forget()
+    elif show_custom==2:
         start_date_label.pack_forget()
         start_date_entry.pack_forget()
         end_date_label.pack_forget()
         end_date_entry.pack_forget()
+        csv_label.pack_forget()
+        csv_entry.pack_forget()
         lookback_label.pack(anchor="w", padx=10, pady=(10, 0))
         lookback_dropdown.pack(anchor="w", padx=10, pady=(10, 0))
+    elif show_custom==3:
+        csv_label.pack(anchor="w", padx=10, pady=(10, 0))
+        csv_entry.pack(anchor="w", padx=10, pady=(10, 0))
+        lookback_label.pack_forget()
+        lookback_dropdown.pack_forget()
+        start_date_label.pack_forget()
+        start_date_entry.pack_forget()
+        end_date_label.pack_forget()
+        end_date_entry.pack_forget()
 
 date_tab=tk.Frame(notebook)
 date_var=tk.StringVar(value="None")
@@ -133,11 +131,14 @@ options=[
     "End (YYYY-MM-DD HR:MIN:SEC)",
 ]
 
-custom_radio = tk.Radiobutton(date_tab, text="Custom Data", variable=date_var, value="Custom Data", command=lambda: toggle_timeframe_fields(True))
+custom_radio = tk.Radiobutton(date_tab, text="Specific Data", variable=date_var, value="Specific Data", command=lambda: toggle_timeframe_fields(1))
 custom_radio.pack(anchor="w", padx=10, pady=(10, 0))
 
-live_radio = tk.Radiobutton(date_tab, text="Live Data", variable=date_var, value="Live Data", command=lambda: toggle_timeframe_fields(False))
+live_radio = tk.Radiobutton(date_tab, text="Live Data", variable=date_var, value="Live Data", command=lambda: toggle_timeframe_fields(2))
 live_radio.pack(anchor="w", padx=10, pady=(10, 0))
+
+bulk_radio = tk.Radiobutton(date_tab, text="Bulk Data", variable=date_var, value="Bulk Data", command=lambda: toggle_timeframe_fields(3))
+bulk_radio.pack(anchor="w", padx=10, pady=(10, 0))
 
 start_date_label = tk.Label(date_tab, text="Start Date:")
 start_date_label.pack(anchor="w", padx=10, pady=(10, 0))
@@ -155,6 +156,11 @@ lookback_label.pack(anchor="w", padx=10, pady=(10, 0))
 lookback_options = ["1 Hour", "6 Hours", "1 Day", "1 Week"]
 lookback_dropdown = ttk.Combobox(date_tab, values=lookback_options)
 lookback_dropdown.pack(anchor="w", padx=10, pady=(10, 0))
+
+csv_label = tk.Label(date_tab, text="CSV file:")
+csv_label.pack(anchor="w", padx=10, pady=(10, 0))
+csv_entry = tk.Entry(date_tab)
+csv_entry.pack(anchor="w", padx=10, pady=(10, 0))
 
 date_entries = {
     "Start (YYYY-MM-DD HR:MIN:SEC)": start_date_entry,
@@ -221,17 +227,69 @@ def process_data():
         event_gap_extension
 )
     
-    temperature_emission_plot=gf.em_temp_plot(
+    temperature_emission_plot=gf.diagnostic_plot(
         t_em_og,
         sgp,
         inputs["Start"],
         start_extension)
+    print("FINISHED")
 
-    update_plot_list()
+def bulk_process():
+    for i, start_date in enumerate(inputs["Start"]):
+        end_date=inputs["End"][i]
 
+        # start_extension=inputs["Start"].replace(' ', '_').replace(':', '-')
+        start_extension=str(start_date).replace(' ', '_').replace(':', '-')
+        integ_time_extenstion=str(inputs["Integration Time"])
+        diff_time_extension=str(inputs["Difference Time"])
+        em_extension=str(inputs["EM Increment"])
+        temp_range_extension=str(inputs["Temperature Range"]).replace("(","").replace(")","").replace(", ","-")
+        event_gap_extension=str(inputs["FAI Duration"])
+        extension=start_extension+"_"+integ_time_extenstion+"_"+diff_time_extension+"_"+em_extension+"_"+temp_range_extension+"_"+event_gap_extension
+
+        ts_og, smooth_plot,ts_1s=gf.timeseries_data(
+            start_date,end_date,inputs["Integration Time"])
+        ts_diff=gf.running_difference(ts_og,inputs["Difference Time"])
+        t_em_diff=gf.calc_temp_em(ts_diff)  # used in flagging calculations
+        t_em_og=gf.calc_temp_em(ts_1s)      # used in temperature and emission plot
+        flagged_df,flagged_times=gf.FAI_flagging(
+            ts_og,
+            t_em_diff,
+            inputs["EM Increment"],
+            inputs["Temperature Range"],
+            inputs["Difference Time"],
+            inputs["FAI Duration"])
+
+        anticipation_plot=gf.anticipation_plot(
+            smooth_plot,
+            flagged_times,
+            sgp,
+            start_date,
+            extension,
+            integ_time_extenstion,
+            diff_time_extension,
+            em_extension,
+            inputs["Temperature Range"],
+            event_gap_extension
+    )
+
+        diagnostic_plot=gf.diagnostic_plot(
+            t_em_og,
+            sgp,
+            start_date,
+            start_extension)
+    print("FINISHED")
 def submit_run():
     submit()
-    process_data()
+    if date_var.get() == "Specific Data" or date_var.get() == "Live Data":
+        process_data()
+    else:
+        bulk_process()
+    update_plot_list()
+# def submit_run():
+#     submit()
+#     bulk_process()
+#     update_plot_list()
 # Button(params_tab,text="submit",command=submit).pack()
 Button(params_tab,text="Run",command=submit_run).pack()
 # submit()
@@ -368,4 +426,3 @@ sys.stderr = ConsoleRedirector(console_text)
 
 
 root.mainloop()
-
