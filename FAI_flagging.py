@@ -162,6 +162,10 @@ csv_label.pack(anchor="w", padx=10, pady=(10, 0))
 csv_entry = tk.Entry(date_tab)
 csv_entry.pack(anchor="w", padx=10, pady=(10, 0))
 
+diagnostic_var=IntVar()
+diagnostic_checkbox=tk.Checkbutton(date_tab, text='Diagnostic Plots', variable=diagnostic_var)
+diagnostic_checkbox.pack(anchor="w", padx=10, pady=(10, 0))
+
 date_entries = {
     "Start (YYYY-MM-DD HR:MIN:SEC)": start_date_entry,
     "End (YYYY-MM-DD HR:MIN:SEC)": end_date_entry
@@ -226,12 +230,13 @@ def process_data():
         inputs["Temperature Range"],
         event_gap_extension
 )
-    
-    temperature_emission_plot=gf.diagnostic_plot(
-        t_em_og,
-        sgp,
-        inputs["Start"],
-        start_extension)
+
+    if diagnostic_var.get()==1:
+        diagnostic_plot=gf.diagnostic_plot(
+            t_em_og,
+            sgp,
+            inputs["Start"],
+            start_extension)
     print("FINISHED")
 
 def bulk_process():
@@ -272,13 +277,13 @@ def bulk_process():
             inputs["Temperature Range"],
             event_gap_extension
     )
-
-        diagnostic_plot=gf.diagnostic_plot(
-            t_em_og,
-            sgp,
-            start_date,
-            start_extension)
-    print("FINISHED")
+        if diagnostic_var.get()==1:
+            diagnostic_plot=gf.diagnostic_plot(
+                t_em_og,
+                sgp,
+                start_date,
+                start_extension)
+    print("\nFINISHED")
 def submit_run():
     submit()
     if date_var.get() == "Specific Data" or date_var.get() == "Live Data":
@@ -286,11 +291,6 @@ def submit_run():
     else:
         bulk_process()
     update_plot_list()
-# def submit_run():
-#     submit()
-#     bulk_process()
-#     update_plot_list()
-# Button(params_tab,text="submit",command=submit).pack()
 Button(params_tab,text="Run",command=submit_run).pack()
 # submit()
 
@@ -323,7 +323,7 @@ console_text = scrolledtext.ScrolledText(
 console_text.pack(expand=True, fill="both", padx=5, pady=5)
 
 
-# --- Canvas + Scrollbar for thumbnails ---
+# Canvas + Scrollbar for thumbnails
 canvas = tk.Canvas(plot_list_frame,width=120)
 scrollbar = ttk.Scrollbar(plot_list_frame, orient="vertical", command=canvas.yview)
 thumb_container = tk.Frame(canvas)
@@ -339,7 +339,7 @@ canvas.configure(yscrollcommand=scrollbar.set)
 canvas.pack(side=tk.RIGHT, fill=tk.BOTH, expand=True)
 scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
 
-# --- Display selected image ---
+#  Display selected image 
 def show_selected_plot(filepath):
     for widget in plot_display_frame.winfo_children():
         widget.destroy()
