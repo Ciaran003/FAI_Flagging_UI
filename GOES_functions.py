@@ -1,4 +1,3 @@
-import sys
 import os
 from sunpy.net import Fido, attrs as a
 import sunpy.timeseries
@@ -18,6 +17,8 @@ def timeseries_data(start_date,end_date,integration_time):
     Resample with integration time to reduce noise
     Convert back to timeseries, while keeping metadata
     """
+    print("DOWNLOADING DATA...")
+    print("...")
     data = Fido.search(a.Time(start_date, end_date), a.Instrument.xrs) # fido gets the data from the noaa
     downloaded_data = Fido.fetch(data)  # download file
     timeseries = sunpy.timeseries.TimeSeries(downloaded_data)   # turn to timeseries
@@ -132,20 +133,6 @@ def FAI_flagging(ts, temp_em_df, em_increment, temp_range, diff_time, event_gap)
 
     
     print(f"  Slope range: {df['slope'].min():.2e} to {df['slope'].max():.2e}")
-    
-    # DIAGNOSTIC: Check a specific flagged time
-    # flagged_check = df[(df['T_MK'] >= temp_range[0]) & 
-    #                    (df['T_MK'] <= temp_range[1]) & 
-    #                    (df['EM_49'] > em_increment)]
-    
-    # if len(flagged_check) > 0:
-    #     print(f"\n  Sample of points meeting EM & T criteria:")
-    #     sample_idx = flagged_check.head(5).index
-    #     for idx in sample_idx:
-    #         slope_val = df.loc[idx, 'slope']
-    #         em_val = df.loc[idx, 'EM_49']
-    #         t_val = df.loc[idx, 'T_MK']
-    #         print(f"    {idx}: slope={slope_val:.2e}, EM={em_val:.4f}, T={t_val:.2f}")
     
     # Flag when all criteria met
     df["slope"] = df["slope"].replace([np.inf, -np.inf], np.nan).fillna(0)
@@ -322,11 +309,13 @@ def diagnostic_plot(temp_em, saved_graph_path,start,start_extension):
     ax["Left"].xaxis.set_minor_formatter(ticker.NullFormatter())
     ax["Left"].xaxis.set_major_formatter(ticker.LogFormatterExponent(base=10))
     
-    df =temp_em
+    df=temp_em
     ax["TopRight"].scatter(df.index,temp)
     ax["TopRight"].set_ylabel("T (MK)", fontsize=12)
     ax["BottomRight"].set_xlabel("Time", fontsize=12)
     ax["BottomRight"].set_ylabel("EM $10^{49}$", fontsize=12)
+    ax["TopRight"].xaxis.set_major_locator(mdates.HourLocator(interval=1))  # Tick every hour
+    ax["TopRight"].xaxis.set_major_formatter(mdates.DateFormatter('%H:%M'))
     plt.setp(ax["TopRight"].get_xticklabels(), visible=False)
 
     ax["BottomRight"].scatter(df.index,em)
@@ -335,6 +324,5 @@ def diagnostic_plot(temp_em, saved_graph_path,start,start_extension):
     filename_EM = f"Diagnostic_{start_extension}.png"
     plt.savefig(f"{saved_graph_path}/{filename_EM}", dpi=150, bbox_inches='tight')
     print(f"Plot saved to {saved_graph_path}/{filename_EM}")
-
     plt.close()
     return fig
