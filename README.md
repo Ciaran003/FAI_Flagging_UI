@@ -18,10 +18,10 @@ Another requirement for this to be executed successfully is file structure:
 - FAI_flagging.py
 - FAI_live.py
 - functions
-  -> GOES_functions.py
-  -> GOES_live.py
-  -> live_inputs.py
-  -> time_inputs.py
+  - GOES_functions.py
+  - GOES_live.py
+  - live_inputs.py
+  - time_inputs.py
 - flagged_times
 - saved_graphs
 - batch.csv
