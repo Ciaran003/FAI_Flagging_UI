@@ -13,3 +13,15 @@ along with the class of the flag (may occur at different class to peak flare).
 
 To run both of these programmes successfully, some python functions must be installed.
 In my experience (linux Mint), these packages needed to be installed within a virtual environment.
+
+Another requirement for this to be executed successfully is file structure:
+- FAI_flagging.py
+- FAI_live.py
+- functions
+  -> GOES_functions.py
+  -> GOES_live.py
+  -> live_inputs.py
+  -> time_inputs.py
+- flagged_times
+- saved_graphs
+- batch.csv
